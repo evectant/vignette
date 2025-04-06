@@ -26,6 +26,26 @@ Expanded scene:
 )
 
 
+SELECT_BEST_SCENE_TEMPLATE = PromptTemplate(
+    input_variables=["scenes"],
+    template="""You are a storyteller for a roleplaying game.
+Below are multiple numbered scene descriptions.
+Select the best one and return its index.
+Do not return anything besides a single number.
+
+When judging, consider the following:
+- How creative is the scene?
+- How well-written is the scene?
+- How immersive is the scene?
+- Does the scene present an interesting situation?
+- Does the scene present a clear challenge?
+
+Scenes:
+{scenes}
+    """,
+)
+
+
 ADD_ACTION_TEMPLATE = PromptTemplate(
     input_variables=["scene", "outcomes", "name", "action"],
     template="""You are a storyteller for a roleplaying game.
