@@ -88,7 +88,9 @@ class Bot:
         # Expand the scene description.
         await update.message.chat.send_action(action="typing")
         initial_description = " ".join(context.args)
-        expanded_description = await self.ai.create_scene(initial_description)
+        expanded_description, image_url = await self.ai.create_scene(
+            initial_description
+        )
         if not expanded_description:
             await update.message.reply_text(
                 "⚠️ Error while creating the scene.",
@@ -97,8 +99,10 @@ class Bot:
             return
 
         # Post and store the scene.
-        scene_message = await update.message.reply_text(
-            expanded_description, reply_to_message_id=update.message.message_id
+        scene_message = await update.message.reply_photo(
+            photo=image_url,
+            caption=expanded_description,
+            reply_to_message_id=update.message.message_id,
         )
         context.chat_data[Bot.SCENE_KEY] = Scene(
             message_id=scene_message.message_id,

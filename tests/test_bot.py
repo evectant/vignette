@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 from vignette.bot import Bot, Scene
 
 SCENE_DESCRIPTION = "Expanded scene"
+SCENE_IMAGE_URL = "https://example.com/image.png"
 ACTION_INTENT = "Action intent"
 ACTION_OUTCOME = "Action outcome"
 SCENE_SUMMARY = "Scene summary"
@@ -32,6 +33,7 @@ def update(mocker):
     mock_update.message.chat = mocker.MagicMock(spec=Chat)
     mock_update.message.chat.send_action = mocker.AsyncMock()
     mock_update.message.reply_text = mocker.AsyncMock()
+    mock_update.message.reply_photo = mocker.AsyncMock()
     mock_update.message.set_reaction = mocker.AsyncMock()
     mock_update.effective_chat = mock_update.message.chat
     mock_update.effective_chat.get_member_count = mocker.AsyncMock(
@@ -65,7 +67,9 @@ def context(mocker):
 @pytest.fixture
 def bot(mocker):
     mock_ai = mocker.MagicMock()
-    mock_ai.create_scene = mocker.AsyncMock(return_value=SCENE_DESCRIPTION)
+    mock_ai.create_scene = mocker.AsyncMock(
+        return_value=(SCENE_DESCRIPTION, SCENE_IMAGE_URL)
+    )
     mock_ai.add_action = mocker.AsyncMock(return_value=ACTION_OUTCOME)
     mock_ai.end_scene = mocker.AsyncMock(return_value=SCENE_SUMMARY)
     return Bot(ai=mock_ai)
@@ -73,7 +77,14 @@ def bot(mocker):
 
 def called_with_warning(mock_callable):
     call_args, call_kwargs = mock_callable.call_args
-    text = call_args[0] if call_args else call_kwargs.get("text")
+    if call_args:
+        text = call_args[0]
+    elif call_kwargs and "text" in call_kwargs:
+        text = call_kwargs["text"]
+    elif call_kwargs and "caption" in call_kwargs:
+        text = call_kwargs["caption"]
+    else:
+        raise ValueError("No text or caption found in call")
     return "⚠️" in text
 
 
@@ -93,7 +104,7 @@ async def test_posts_help(bot, update, context):
 @pytest.mark.asyncio
 async def test_creates_scene(bot, update, context, mocker):
     assert not Bot._is_scene_active(context)
-    update.message.reply_text.return_value = mocker.MagicMock(
+    update.message.reply_photo.return_value = mocker.MagicMock(
         message_id=BOT_SCENE_MESSAGE_ID
     )
     await bot.handle_scene(update, context)
@@ -101,8 +112,10 @@ async def test_creates_scene(bot, update, context, mocker):
     # Verify that AI was called
     bot.ai.create_scene.assert_called_once_with("Initial scene")
     # ...the result was posted as a reply to the original message
-    update.message.reply_text.assert_called_once_with(
-        SCENE_DESCRIPTION, reply_to_message_id=update.message.message_id
+    update.message.reply_photo.assert_called_once_with(
+        photo=SCENE_IMAGE_URL,
+        caption=SCENE_DESCRIPTION,
+        reply_to_message_id=update.message.message_id,
     )
     # ...and the scene was stored in the context.
     assert Bot._is_scene_active(context)
@@ -140,8 +153,8 @@ async def test_does_not_overwrite_existing_scene(bot, update, context):
     # ...AI was called
     assert bot.ai.create_scene.call_count == 1
     # ...and a normal reply was posted.
-    assert update.message.reply_text.call_count == 1
-    assert not called_with_warning(update.message.reply_text)
+    assert update.message.reply_photo.call_count == 1
+    assert not called_with_warning(update.message.reply_photo)
 
     # Try to create another scene.
     await bot.handle_scene(update, context)
@@ -151,7 +164,7 @@ async def test_does_not_overwrite_existing_scene(bot, update, context):
     # ...there were no new AI calls
     assert bot.ai.create_scene.call_count == 1
     # ...but another reply was posted
-    assert update.message.reply_text.call_count == 2
+    assert update.message.reply_text.call_count == 1
     # ...that contained a warning.
     assert called_with_warning(update.message.reply_text)
 
@@ -159,7 +172,7 @@ async def test_does_not_overwrite_existing_scene(bot, update, context):
 @pytest.mark.asyncio
 async def test_handles_ai_errors_when_creating_scene(bot, update, context):
     assert not Bot._is_scene_active(context)
-    bot.ai.create_scene.return_value = None
+    bot.ai.create_scene.return_value = None, None
     await bot.handle_scene(update, context)
 
     # Verify that AI was called

@@ -36,9 +36,10 @@ def main():
 
     load_dotenv()
     openai_api_key = getenv("OPENAI_API_KEY")
+    runware_api_key = getenv("RUNWARE_API_KEY")
     telegram_api_key = getenv("TELEGRAM_API_KEY")
 
-    ai = AI(openai_api_key)
+    ai = AI(openai_api_key, runware_api_key)
     bot = Bot(ai)
 
     app = Application.builder().token(telegram_api_key).build()

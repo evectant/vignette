@@ -24,7 +24,7 @@ Expanded scene (in the same language as the initial scene):
     """,
 )
 
-
+# TODO: Consider asking the model to explain its reasoning - just to improve decision quality.
 SELECT_BEST_SCENE_TEMPLATE = PromptTemplate.from_template(
     template="""You are a storyteller for a roleplaying game.
 Below are multiple numbered scene descriptions.
@@ -38,6 +38,34 @@ When judging, prefer scenes that:
 
 Scenes:
 {scenes}
+    """,
+)
+
+
+REFINE_SCENE_TEMPLATE = PromptTemplate.from_template(
+    template="""You are a professional editor for a reputable publishing house.
+Correct grammar, stylistic, and punctuation errors in the given scene description.
+
+Initial scene:
+{description}
+
+Refined scene (in the same language as the initial scene):
+    """,
+)
+
+
+VISUALIZE_SCENE_TEMPLATE = PromptTemplate.from_template(
+    template="""Describe the visuals of the given scene, following these rules:
+- Only describe the visuals as a camera would see them; do not describe the mood or atmosphere.
+- Start with a single sentence describing the scene as a whole.
+- Use simple words and clear language; do not use flowery language.
+- Use English even if the scene is written in another language.
+- Use 50 words or fewer.
+
+Scene:
+{description}
+
+Visual description (in English):
     """,
 )
 
