@@ -46,8 +46,8 @@ async def test_creates_scene(mock_working_ai):
     text, image = await mock_working_ai.create_scene("Initial scene")
     assert text == TEXT_MODEL_OUTPUT
     assert image == IMAGE_MODEL_OUTPUT
-    # 8 calls: 5 to generate candidates, 1 to select, 1 to refine, 1 to visualize.
-    assert mock_working_ai.text_model.with_structured_output.call_count == 8
+    # 6 calls: 3 to generate candidates, 1 to select, 1 to refine, 1 to visualize.
+    assert mock_working_ai.text_model.with_structured_output.call_count == 6
     assert mock_working_ai.generate_image.call_count == 1
 
 
@@ -56,7 +56,7 @@ async def test_handles_errors_when_creating_scene(mock_failing_ai):
     text, image = await mock_failing_ai.create_scene("Initial scene")
     assert text is None
     assert image is None
-    assert mock_failing_ai.text_model.with_structured_output.call_count == 8
+    assert mock_failing_ai.text_model.with_structured_output.call_count == 6
     assert mock_failing_ai.generate_image.call_count == 1
 
 
@@ -78,11 +78,12 @@ async def test_handles_errors_when_adding_action(mock_failing_ai):
 async def test_ends_scene(mock_working_ai):
     result = await mock_working_ai.end_scene("Scene", "Outcomes")
     assert result == TEXT_MODEL_OUTPUT
-    mock_working_ai.text_model.invoke.assert_called_once()
+    # 5 calls: 3 to generate candidates, 1 to select, 1 to refine (no visualization).
+    assert mock_working_ai.text_model.with_structured_output.call_count == 5
 
 
 @pytest.mark.asyncio
 async def test_handles_errors_when_ending_scene(mock_failing_ai):
     result = await mock_failing_ai.end_scene("Scene", "Outcomes")
     assert result is None
-    mock_failing_ai.text_model.invoke.assert_called_once()
+    assert mock_failing_ai.text_model.with_structured_output.call_count == 5

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class GeneratorState(BaseModel):
     # Initialized by the caller.
-    original: str = Field(description="Original text")
+    inputs: list[str] = Field(description="Inputs to the generator")
     num_candidates: int = Field(description="Number of candidates to generate")
     candidates: Annotated[list, operator.add] = Field(
         description="Generated candidates"
@@ -48,7 +48,7 @@ class Node(StrEnum):
 class GeneratorGraph:
     def __init__(
         self,
-        original: str,
+        inputs: list[str],
         num_candidates: int,
         generator: Callable,
         selector: Callable,
@@ -56,7 +56,7 @@ class GeneratorGraph:
         visualizer: Callable,
         renderer: Callable,
     ):
-        self.original = original
+        self.inputs = inputs
         self.num_candidates = num_candidates
         self.generator = generator
         self.selector = selector
@@ -85,7 +85,7 @@ class GeneratorGraph:
     async def invoke(self):
         final_dict = await self.graph.ainvoke(
             GeneratorState(
-                original=self.original,
+                inputs=self.inputs,
                 num_candidates=self.num_candidates,
                 candidates=[],
             )
@@ -100,7 +100,7 @@ class GeneratorGraph:
         ]
 
     def generate_candidate(self, state: GeneratorState):
-        candidate = self.generator(state.original)
+        candidate = self.generator(state.inputs)
         return {"candidates": [candidate]}
 
     @staticmethod

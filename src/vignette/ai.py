@@ -5,7 +5,7 @@ from typing import Type, TypeVar
 import requests
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .generator import GeneratorGraph
 from .prompts import (
@@ -92,8 +92,8 @@ class AI:
         class SceneIndex(BaseModel):
             index: int
 
-        def generate_scene(original: str) -> str | None:
-            prompt = CREATE_SCENE_TEMPLATE.format(description=original)
+        def generate_scene(inputs: list[str]) -> str | None:
+            prompt = CREATE_SCENE_TEMPLATE.format(description=inputs[0])
             response = self.generate_text(
                 prompt=prompt, temperature=0.8, output_model=SceneDescription
             )
@@ -133,8 +133,8 @@ class AI:
             return self.generate_image(description, 1024, 1024, 40)
 
         graph = GeneratorGraph(
-            num_candidates=5,
-            original=description,
+            num_candidates=3,
+            inputs=[description],
             generator=generate_scene,
             selector=select_scene,
             refiner=refine_scene,
@@ -154,11 +154,53 @@ class AI:
         )
 
     async def end_scene(self, scene: str, outcomes: str) -> str | None:
-        return await self._invoke(
-            model=self.text_model,
-            prompt=END_SCENE_TEMPLATE,
-            args={"scene": scene, "outcomes": outcomes},
+        class Ending(BaseModel):
+            description: str
+
+        class EndingIndex(BaseModel):
+            index: int
+
+        def generate_ending(inputs: list[str]) -> str | None:
+            prompt = END_SCENE_TEMPLATE.format(scene=inputs[0], outcomes=inputs[1])
+            response = self.generate_text(
+                prompt=prompt, temperature=0.8, output_model=Ending
+            )
+            if response is None:
+                return None
+            return response.description
+
+        def select_ending(candidate_endings: str) -> int | None:
+            prompt = SELECT_BEST_SCENE_TEMPLATE.format(scenes=candidate_endings)
+            response = self.generate_text(
+                prompt=prompt, temperature=0.5, output_model=EndingIndex
+            )
+            # Default to first ending if selection fails.
+            if response is None:
+                return 0
+            return response.index
+
+        def refine_ending(ending: str) -> str | None:
+            prompt = REFINE_SCENE_TEMPLATE.format(description=ending)
+            response = self.generate_text(
+                prompt=prompt, temperature=0.7, output_model=Ending
+            )
+            if response is None:
+                return None
+            return response.description
+
+        graph = GeneratorGraph(
+            num_candidates=3,
+            inputs=[scene, outcomes],
+            generator=generate_ending,
+            selector=select_ending,
+            refiner=refine_ending,
+            # It would be nice to visualize the ending, but it needs
+            # to be consistent with the scene, which requires some thought.
+            visualizer=lambda _: None,
+            renderer=lambda _: None,
         )
+        state = await graph.invoke()
+        return state.refined
 
     async def _invoke(
         self, model: BaseChatModel, prompt: str, args: dict

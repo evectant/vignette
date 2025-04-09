@@ -53,7 +53,8 @@ Refined scene (in the same language as the initial scene):
     """,
 )
 
-
+# TODO: Cross-language visualization sometimes loses details.
+# See if adding a separate translation step is worth it.
 VISUALIZE_SCENE_TEMPLATE = PromptTemplate.from_template(
     template="""Describe the visuals of the given scene, following these rules:
 - Only describe the visuals as a camera would see them; do not describe the mood or atmosphere.
@@ -108,12 +109,12 @@ The game consists of a single scene, and the characters may only act once.
 All characters have already acted, so the scene is over.
 
 Return three paragraphs:
-1. Describe the final outcome of the scene. It must be final and not suggest more actions.
+1. Describe the final outcome of the scene. It must be conclusive and not suggest more actions.
 2. Explain whether the characters won or lost. The characters must lose if their actions failed, or if nobody acted at all.
 3. Select the most well-written or creative action as the winner. Briefly explain why you chose it.
 
 You response must:
-- Be written in the same language as the scene description, previous actions, and this action.
+- Be written in the same language as the scene description and previous actions.
 - Stay in character: do not speak of "players", "characters", "game", etc.
 - Not use markup, headers, emojis, or any other formatting.
 - Use 150 words or fewer.
