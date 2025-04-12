@@ -5,7 +5,7 @@ from typing import Type, TypeVar
 import requests
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from .generator import GeneratorGraph
 from .prompts import (
@@ -149,11 +149,40 @@ class AI:
     async def add_action(
         self, scene: str, outcomes: str, name: str, action: str
     ) -> str | None:
-        return await self._invoke(
-            model=self.text_model,
-            prompt=ADD_ACTION_TEMPLATE,
-            args={"scene": scene, "outcomes": outcomes, "name": name, "action": action},
+        class Outcome(BaseModel):
+            description: str
+
+        def generate_outcome(inputs: list[str]) -> str | None:
+            prompt = ADD_ACTION_TEMPLATE.format(
+                scene=inputs[0], outcomes=inputs[1], name=inputs[2], action=inputs[3]
+            )
+            response = self.generate_text(
+                prompt=prompt, temperature=0.8, output_model=Outcome
+            )
+            if response is None:
+                return None
+            return response.description
+
+        def refine_outcome(outcome: str) -> str | None:
+            prompt = REFINE_SCENE_TEMPLATE.format(description=outcome)
+            response = self.generate_text(
+                prompt=prompt, temperature=0.7, output_model=Outcome
+            )
+            if response is None:
+                return None
+            return response.description
+
+        graph = GeneratorGraph(
+            num_candidates=1,
+            inputs=[scene, outcomes, name, action],
+            generator=generate_outcome,
+            selector=lambda _: 0,  # There is only one candidate.
+            refiner=refine_outcome,
+            visualizer=lambda _: None,
+            renderer=lambda _: None,
         )
+        state = await graph.invoke()
+        return state.refined
 
     async def end_scene(self, scene: str, outcomes: str) -> str | None:
         class Ending(BaseModel):

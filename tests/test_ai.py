@@ -64,14 +64,14 @@ async def test_handles_errors_when_creating_scene(mock_failing_ai):
 async def test_adds_action(mock_working_ai):
     result = await mock_working_ai.add_action("Scene", "Outcomes", "Name", "Action")
     assert result == TEXT_MODEL_OUTPUT
-    mock_working_ai.text_model.invoke.assert_called_once()
+    assert mock_working_ai.text_model.with_structured_output.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_handles_errors_when_adding_action(mock_failing_ai):
     result = await mock_failing_ai.add_action("Scene", "Outcomes", "Name", "Action")
     assert result is None
-    mock_failing_ai.text_model.invoke.assert_called_once()
+    assert mock_failing_ai.text_model.with_structured_output.call_count == 2
 
 
 @pytest.mark.asyncio
