@@ -23,13 +23,13 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class AI:
-    TEXT_MODEL = "openai:gpt-4o"
+    TEXT_MODEL = "anthropic:claude-3-7-sonnet-latest"
     IMAGE_MODEL = "runware:101@1"  # FLUX.1 Dev.
 
-    def __init__(self, openai_api_key: str, runware_api_key: str):
+    def __init__(self, llm_api_key: str, runware_api_key: str):
         self.text_model = init_chat_model(
             model=AI.TEXT_MODEL,
-            api_key=openai_api_key,
+            api_key=llm_api_key,
             configurable_fields=("temperature"),
         )
         self.runware_api_key = runware_api_key

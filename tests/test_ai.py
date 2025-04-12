@@ -9,7 +9,7 @@ IMAGE_MODEL_OUTPUT = "https://example.com/image.png"
 
 @pytest.fixture
 def mock_ai(mocker):
-    ai = AI(openai_api_key="mock-openai-key", runware_api_key="mock-runware-key")
+    ai = AI(llm_api_key="mock-llm-key", runware_api_key="mock-runware-key")
     ai.text_model = mocker.MagicMock(spec=BaseChatModel)
     ai.text_model.invoke = mocker.MagicMock(
         return_value=mocker.MagicMock(content=TEXT_MODEL_OUTPUT)
