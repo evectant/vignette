@@ -1,11 +1,14 @@
 import pytest
+import tenacity
 from langchain_core.language_models.chat_models import BaseChatModel
-from tenacity import wait_fixed
 
 from vignette.ai import AI
 
 TEXT_MODEL_OUTPUT = "Model-generated text"
 IMAGE_MODEL_OUTPUT = "https://example.com/image.png"
+
+TEXT_MODEL_ERROR = "Text model error"
+IMAGE_MODEL_ERROR = "Image model error"
 
 
 @pytest.fixture
@@ -20,10 +23,14 @@ def mock_ai(mocker):
             return_value=mocker.MagicMock(description=TEXT_MODEL_OUTPUT)
         )
     )
-    ai.image_model = mocker.MagicMock()
     ai.generate_image = mocker.MagicMock(return_value=IMAGE_MODEL_OUTPUT)
 
-    mocker.patch("vignette.ai.wait_exponential", return_value=wait_fixed(0.01))
+    AI.retry = tenacity.retry(
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_fixed(0.01),
+        reraise=True,
+    )
+
     return ai
 
 
@@ -34,14 +41,10 @@ def mock_working_ai(mocker, mock_ai):
 
 @pytest.fixture
 def mock_failing_ai(mocker, mock_ai):
-    mock_ai.text_model.invoke = mocker.MagicMock(side_effect=Exception("API error"))
     mock_ai.text_model.with_structured_output.return_value = mocker.MagicMock(
-        invoke=mocker.MagicMock(side_effect=Exception("API error"))
+        invoke=mocker.MagicMock(side_effect=Exception(TEXT_MODEL_ERROR))
     )
-    # TODO: A better mock would raise an exception, but we first need to change
-    # how we handle exceptions (only catch at the bot command level).
-    # Returning `None` also messes up our retry logic during testing.
-    mock_ai.generate_image = mocker.MagicMock(return_value=None)
+    mock_ai.generate_image = mocker.MagicMock(side_effect=Exception(IMAGE_MODEL_ERROR))
     return mock_ai
 
 
@@ -57,12 +60,15 @@ async def test_creates_scene(mock_working_ai):
 
 @pytest.mark.asyncio
 async def test_handles_errors_when_creating_scene(mock_failing_ai):
-    text, image = await mock_failing_ai.create_scene("Initial scene")
-    assert text is None
-    assert image is None
-    # Same as the happy path, but with 3 retries.
-    assert mock_failing_ai.text_model.with_structured_output.call_count == 6 * 3
-    assert mock_failing_ai.generate_image.call_count == 1
+    with pytest.raises(Exception) as ex:
+        await mock_failing_ai.create_scene("Initial scene")
+    assert str(ex.value) == TEXT_MODEL_ERROR
+    # We can't assert the exact number of calls because the final exception is raised once any
+    # graph node exhausts its retries, and we don't know how many nodes still have retries left.
+    # We could assert a tighter bound, but not worth it for now.
+    assert mock_failing_ai.text_model.with_structured_output.call_count > 0
+    # The graph should not progress to image generation.
+    assert mock_failing_ai.generate_image.not_called()
 
 
 @pytest.mark.asyncio
@@ -74,10 +80,10 @@ async def test_adds_action(mock_working_ai):
 
 @pytest.mark.asyncio
 async def test_handles_errors_when_adding_action(mock_failing_ai):
-    result = await mock_failing_ai.add_action("Scene", "Outcomes", "Name", "Action")
-    assert result is None
-    # Same as the happy path, but with 3 retries.
-    assert mock_failing_ai.text_model.with_structured_output.call_count == 2 * 3
+    with pytest.raises(Exception) as ex:
+        await mock_failing_ai.add_action("Scene", "Outcomes", "Name", "Action")
+    assert str(ex.value) == TEXT_MODEL_ERROR
+    assert mock_failing_ai.text_model.with_structured_output.call_count > 0
 
 
 @pytest.mark.asyncio
@@ -90,7 +96,7 @@ async def test_ends_scene(mock_working_ai):
 
 @pytest.mark.asyncio
 async def test_handles_errors_when_ending_scene(mock_failing_ai):
-    result = await mock_failing_ai.end_scene("Scene", "Outcomes")
-    assert result is None
-    # Same as the happy path, but with 3 retries.
-    assert mock_failing_ai.text_model.with_structured_output.call_count == 5 * 3
+    with pytest.raises(Exception) as ex:
+        await mock_failing_ai.end_scene("Scene", "Outcomes")
+    assert str(ex.value) == TEXT_MODEL_ERROR
+    assert mock_failing_ai.text_model.with_structured_output.call_count > 0

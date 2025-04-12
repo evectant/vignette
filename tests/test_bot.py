@@ -75,7 +75,7 @@ def bot(mocker):
     return Bot(ai=mock_ai)
 
 
-def called_with_warning(mock_callable):
+def called_with_substring(mock_callable, substring):
     call_args, call_kwargs = mock_callable.call_args
     if call_args:
         text = call_args[0]
@@ -85,7 +85,15 @@ def called_with_warning(mock_callable):
         text = call_kwargs["caption"]
     else:
         raise ValueError("No text or caption found in call")
-    return "⚠️" in text
+    return substring in text
+
+
+def called_with_warning(mock_callable):
+    return called_with_substring(mock_callable, "⚠️")
+
+
+def called_with_error(mock_callable):
+    return called_with_substring(mock_callable, "❌")
 
 
 @pytest.mark.asyncio
@@ -172,7 +180,7 @@ async def test_does_not_overwrite_existing_scene(bot, update, context):
 @pytest.mark.asyncio
 async def test_handles_ai_errors_when_creating_scene(bot, update, context):
     assert not Bot._is_scene_active(context)
-    bot.ai.create_scene.return_value = None, None
+    bot.ai.create_scene.side_effect = Exception()
     await bot.handle_start(update, context)
 
     # Verify that AI was called
@@ -181,8 +189,8 @@ async def test_handles_ai_errors_when_creating_scene(bot, update, context):
     assert not Bot._is_scene_active(context)
     # ...and a reply was posted
     update.message.reply_text.assert_called_once()
-    # ...that contained a warning.
-    assert called_with_warning(update.message.reply_text)
+    # ...that contained an error.
+    assert called_with_error(update.message.reply_text)
 
 
 @pytest.mark.asyncio
@@ -320,14 +328,14 @@ async def test_handles_ai_errors_when_adding_actions(bot, update, context):
     context.chat_data[Bot.SCENE_KEY] = Scene(
         message_id=BOT_SCENE_MESSAGE_ID, description=SCENE_DESCRIPTION, actions={}
     )
-    bot.ai.add_action.return_value = None
+    bot.ai.add_action.side_effect = Exception()
     await bot.handle_reply(update, context)
 
     # Verify that AI was called
     bot.ai.add_action.assert_called_once()
-    # ...a reply with a warning was posted
+    # ...a reply with an error was posted
     assert update.message.reply_text.call_count == 1
-    assert called_with_warning(update.message.reply_text)
+    assert called_with_error(update.message.reply_text)
     # ...and the in-progress action was removed from the scene.
     scene = Bot._get_scene(context)
     assert USER_ID not in scene.actions
@@ -356,13 +364,13 @@ async def test_handles_ai_errors_when_completing_scenes(bot, update, context):
         message_id=BOT_SCENE_MESSAGE_ID, description=SCENE_DESCRIPTION, actions={}
     )
     # ...and complete it, but make AI fail.
-    bot.ai.end_scene.return_value = None
+    bot.ai.end_scene.side_effect = Exception()
     await bot.handle_end(update, context)
 
     # Verify that AI was called
     bot.ai.end_scene.assert_called_once()
-    # ...a reply with a warning was posted
+    # ...a reply with an error was posted
     update.message.reply_text.assert_called_once()
-    assert called_with_warning(update.message.reply_text)
+    assert called_with_error(update.message.reply_text)
     # ...and the scene remained active.
     assert Bot._is_scene_active(context)

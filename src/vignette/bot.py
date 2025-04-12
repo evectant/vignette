@@ -69,30 +69,25 @@ class Bot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not context.args:
-            await update.message.reply_text(
-                "⚠️ Missing description.",
-                reply_to_message_id=update.message.message_id,
-            )
+            await Bot._reply_warning(update.message, "Missing scene description.")
             return
 
         if Bot._is_scene_active(context):
-            await update.message.reply_text(
-                "⚠️ There is already an active scene.",
-                reply_to_message_id=update.message.message_id,
+            await Bot._reply_warning(
+                update.message, "There is already an active scene."
             )
             return
 
         # Expand the scene description.
-        await self._ack_message(update.message)
+        await Bot._ack_message(update.message)
         initial_description = " ".join(context.args)
-        expanded_description, image_url = await self.ai.create_scene(
-            initial_description
-        )
-        if not expanded_description:
-            await update.message.reply_text(
-                "⚠️ Error while creating the scene.",
-                reply_to_message_id=update.message.message_id,
+
+        try:
+            expanded_description, image_url = await self.ai.create_scene(
+                initial_description
             )
+        except Exception as ex:
+            await Bot._reply_error(update.message, f"Error while creating scene: {ex}")
             return
 
         # Post and store the scene.
@@ -130,9 +125,8 @@ class Bot:
 
         # Only allow one reply per user.
         if update.message.from_user.id in scene.actions:
-            await update.message.reply_text(
-                "⚠️ You have already replied to this scene.",
-                reply_to_message_id=update.message.message_id,
+            await Bot._reply_warning(
+                update.message, "You already replied to this scene."
             )
             return
 
@@ -147,14 +141,14 @@ class Bot:
         )
 
         # Generate the outcome.
-        await self._ack_message(update.message)
-        outcome = await self.ai.add_action(
-            scene.description, scene.outcomes(), name, action
-        )
-        if not outcome:
-            await update.message.reply_text(
-                "⚠️ Error while processing the action.",
-                reply_to_message_id=update.message.message_id,
+        await Bot._ack_message(update.message)
+        try:
+            outcome = await self.ai.add_action(
+                scene.description, scene.outcomes(), name, action
+            )
+        except Exception as ex:
+            await Bot._reply_error(
+                update.message, f"Error while processing action: {ex}"
             )
             # Remove the action, so the player can try again.
             del scene.actions[user_id]
@@ -167,35 +161,42 @@ class Bot:
         )
 
         # End scene if we have a majority of replies.
-        if await self._has_majority_replied(update.message.chat, context):
+        if await Bot._has_majority_replied(update.message.chat, context):
             await self.handle_end(update, context)
 
     async def handle_end(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not Bot._is_scene_active(context):
-            await update.message.reply_text(
-                "⚠️ No active scene to end.",
-                reply_to_message_id=update.message.message_id,
-            )
+            await Bot._reply_warning(update.message, "No active scene to end.")
             return
 
-        await self._ack_message(update.message)
+        await Bot._ack_message(update.message)
         scene = Bot._get_scene(context)
-        summary = await self.ai.end_scene(scene.description, scene.outcomes())
-        if not summary:
-            await update.message.reply_text(
-                "⚠️ Error while completing the scene.",
-                reply_to_message_id=update.message.message_id,
+        try:
+            summary = await self.ai.end_scene(scene.description, scene.outcomes())
+        except Exception as ex:
+            await Bot._reply_error(
+                update.message, f"Error while completing scene: {ex}"
             )
             return
 
         await update.message.reply_text(summary, reply_to_message_id=scene.message_id)
         Bot._delete_scene(context)
 
-    async def _ack_message(self, message: Message) -> None:
+    @staticmethod
+    async def _ack_message(message: Message) -> None:
         await message.set_reaction("👍")
         await message.chat.send_action(action="typing")
+
+    @staticmethod
+    async def _reply_warning(message: Message, warning: str) -> None:
+        await message.reply_text(f"⚠️ {warning}", reply_to_message_id=message.message_id)
+
+    @staticmethod
+    async def _reply_error(message: Message, error: str) -> None:
+        logger.error(error)
+        await message.reply_text(f"❌ {error}", reply_to_message_id=message.message_id)
 
     @staticmethod
     def _get_scene(context: ContextTypes.DEFAULT_TYPE) -> Scene | None:

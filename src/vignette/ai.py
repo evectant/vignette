@@ -4,9 +4,8 @@ from typing import Type, TypeVar
 
 import requests
 from langchain.chat_models import init_chat_model
-from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential
+import tenacity
 
 from .generator import GeneratorGraph
 from .prompts import (
@@ -35,33 +34,29 @@ class AI:
         )
         self.runware_api_key = runware_api_key
 
+    retry = tenacity.retry(
+        stop=tenacity.stop_after_attempt(4),
+        wait=tenacity.wait_exponential(),
+        reraise=True,
+        after=lambda state: logger.error(
+            f"Attempt {state.attempt_number} failed with {state.outcome.exception()}"
+        ),
+    )
+
     def generate_text(
         self, prompt: str, temperature: float, output_model: Type[T]
     ) -> T:
         logger.info(
             f"Invoking {self.text_model=} with {prompt=}, {temperature=}, {output_model=}"
         )
-        try:
 
-            @retry(
-                stop=stop_after_attempt(3),
-                wait=wait_exponential(),
-                reraise=True,
-                before_sleep=lambda retry_state: logger.error(
-                    f"Retrying after {retry_state.outcome.exception()}"
-                ),
+        @AI.retry
+        def make_request():
+            return self.text_model.with_structured_output(output_model).invoke(
+                prompt, config={"configurable": {"temperature": temperature}}
             )
-            def make_request():
-                return self.text_model.with_structured_output(output_model).invoke(
-                    prompt, config={"configurable": {"temperature": temperature}}
-                )
 
-            response = make_request()
-
-        except Exception as error:
-            logger.error(f"Encountered {error=}")
-            return None
-
+        response = make_request()
         logger.info(f"Received {response=}")
         return response
 
@@ -89,26 +84,13 @@ class AI:
             }
         ]
 
-        @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(),
-            reraise=True,
-            before_sleep=lambda retry_state: logger.error(
-                f"Retrying after {retry_state.outcome.exception()}"
-            ),
-        )
+        @AI.retry
         def make_request():
             response = requests.post(url, headers=headers, json=data)
             response.raise_for_status()
             return response
 
         response = make_request()
-
-        # TODO: Instead of handling errors here, propagate everything and catch only at the bot command level.
-        if response.status_code != 200:
-            logger.error(f"Received {response.status_code=} in response to {data=}")
-            return None
-
         response_json = response.json()
         logger.info(f"Received {response_json=} in response to {data=}")
 
@@ -126,8 +108,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.8, output_model=SceneDescription
             )
-            if response is None:
-                return None
             return response.description
 
         def select_scene(candidate_scenes: str) -> int | None:
@@ -135,9 +115,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.5, output_model=SceneIndex
             )
-            # Default to first scene if selection fails.
-            if response is None:
-                return 0
             return response.index
 
         def refine_scene(scene: str) -> str | None:
@@ -145,8 +122,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.7, output_model=SceneDescription
             )
-            if response is None:
-                return None
             return response.description
 
         def visualize_scene(scene: str) -> str | None:
@@ -154,8 +129,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.7, output_model=SceneDescription
             )
-            if response is None:
-                return None
             return response.description
 
         def render_scene(description: str) -> str | None:
@@ -186,8 +159,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.8, output_model=Outcome
             )
-            if response is None:
-                return None
             return response.description
 
         def refine_outcome(outcome: str) -> str | None:
@@ -195,8 +166,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.7, output_model=Outcome
             )
-            if response is None:
-                return None
             return response.description
 
         graph = GeneratorGraph(
@@ -223,8 +192,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.8, output_model=Ending
             )
-            if response is None:
-                return None
             return response.description
 
         def select_ending(candidate_endings: str) -> int | None:
@@ -232,9 +199,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.5, output_model=EndingIndex
             )
-            # Default to first ending if selection fails.
-            if response is None:
-                return 0
             return response.index
 
         def refine_ending(ending: str) -> str | None:
@@ -242,8 +206,6 @@ class AI:
             response = self.generate_text(
                 prompt=prompt, temperature=0.7, output_model=Ending
             )
-            if response is None:
-                return None
             return response.description
 
         graph = GeneratorGraph(
@@ -259,17 +221,3 @@ class AI:
         )
         state = await graph.invoke()
         return state.refined
-
-    async def _invoke(
-        self, model: BaseChatModel, prompt: str, args: dict
-    ) -> str | None:
-        chain = prompt | model
-        logger.info(f"Invoking {chain=} with {args=}")
-        try:
-            response = chain.invoke(args)
-        except Exception as error:
-            logger.error(f"Encountered {error=}")
-            return None
-
-        logger.info(f"Received {response=}")
-        return response.content
