@@ -51,7 +51,7 @@ class AI:
         logger.info(f"Received {response=}")
         return response
 
-    def generate_image(self, prompt: str, width: int, height: int, steps: int) -> str:
+    def generate_image(self, prompt: str) -> str:
         url = "https://api.runware.ai/v1"
         headers = {
             "Content-Type": "application/json",
@@ -63,11 +63,13 @@ class AI:
                 "taskUUID": str(uuid.uuid4()),
                 "model": AI.IMAGE_MODEL,
                 "positivePrompt": prompt,
-                "width": width,
-                "height": height,
-                "steps": steps,
+                "width": 1024,
+                "height": 1024,
+                "steps": 50,
                 "outputFormat": "PNG",
-                "CFGScale": 30.0,  # High prompt adherence.
+                # Prompt adherence. FLUX.1 Dev generates heavily stylized images at 0.0
+                # and realistic images at 2.0 and higher. 1.4 strikes a good balance.
+                "CFGScale": 1.4,
                 "numberResults": 1,
                 "includeCost": True,
             }
@@ -130,7 +132,7 @@ class AI:
             return response.description
 
         def render_scene(description: str) -> str | None:
-            return self.generate_image(description, 1024, 1024, 40)
+            return self.generate_image(description)
 
         graph = GeneratorGraph(
             num_candidates=3,
