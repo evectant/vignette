@@ -2,19 +2,18 @@ from langchain.prompts import PromptTemplate
 
 CREATE_SCENE_TEMPLATE = PromptTemplate.from_template(
     template="""You are a storyteller for a roleplaying game.
-The game consists of a single scene, and the characters may only act once.
+The game consists of a single scene.
 Expand the initial scene description to add details and atmosphere.
 
-Observe the following rules:
+The expanded scene must:
 - Stay close to the initial scene.
-- The more fleshed out the initial scene, the less you need to add.
-- The scene must present a dangerous situation.
-- Do not guide the characters towards possible solutions.
+- Present a dangerous situation.
+- Not suggest possible solutions.
 
 Your response must:
-- Be written in the same language as the initial scene.
-- Stay in character: do not speak of "players", "characters", "game", etc.
-- Not use markup, headers, emojis, or any other formatting.
+- Use the same language as the initial scene.
+- Stay in character and not reference "players", "game", etc.
+- Not use markdown, bold text, headers, emojis, or any other formatting.
 - Use 100 words or fewer.
 
 Initial scene:
@@ -28,13 +27,13 @@ Expanded scene (in the same language as the initial scene):
 SELECT_BEST_SCENE_TEMPLATE = PromptTemplate.from_template(
     template="""You are a storyteller for a roleplaying game.
 Below are multiple numbered scene descriptions.
-Select the best one and return its index.
-Do not return anything besides a single number.
+Select the best scene and return its number.
+Only return a single number.
 
-When judging, prefer scenes that:
-- are well-written;
-- are creative and immersive;
-- present a dynamic and challenging situation.
+Prefer scenes that:
+- are grammatically correct;
+- are written in good style;
+- are creative and immersive.
 
 Scenes:
 {scenes}
@@ -43,13 +42,15 @@ Scenes:
 
 
 REFINE_SCENE_TEMPLATE = PromptTemplate.from_template(
-    template="""You are a professional editor for a reputable publishing house.
+    template="""You are a professional editor.
 Correct grammar, stylistic, and punctuation errors in the given scene description.
+If some sentences could be improved, rewrite them.
+Only return the rewritten scene.
 
 Initial scene:
 {description}
 
-Refined scene (in the same language as the initial scene):
+Rewritten scene (in the same language as the initial scene):
     """,
 )
 
@@ -77,16 +78,16 @@ The game consists of a single scene, and the characters may only act once.
 You are given the scene description, previous characters' actions, and current character's action.
 Describe the outcome of current character's action and its effect on the scene.
 
-Observe the following rules:
-- Characters may only act once, so present a finalized outcome and do not suggest more actions.
+Follow these rules:
+- Characters may only act once, so present a conclusive outcome and do not suggest more actions.
 - If the action is unrealistic for the scene, make the character suffer the consequences.
 - Judge harshly: it should not be easy for the character to overcome the situation.
-- However, give more leeway to actions that are well-written and creative.
+- However, give more leeway to well-written and creative actions.
 
 Your response must:
-- Be written in the same language as the scene description, previous actions, and this action.
-- Stay in character: do not speak of "players", "characters", "game", etc.
-- Not use markup, headers, emojis, or any other formatting.
+- Use the same language as the scene description, previous actions, and this action.
+- Stay in character and not reference "players", "game", etc.
+- Not use markdown, bold text, headers, emojis, or any other formatting.
 - Use 75 words or fewer.
 
 Scene:
@@ -105,21 +106,20 @@ Action outcome:
 
 END_SCENE_TEMPLATE = PromptTemplate.from_template(
     template="""You are a storyteller for a roleplaying game.
-The game consists of a single scene, and the characters may only act once.
-All characters have already acted, so the scene is over.
+The game just ended.
+Summarize the game in three paragraphs:
+- Summarize what the characters did and whether they won or lost overall. The characters must lose if their actions failed, or if nobody acted at all.
+- Describe the final outcome. It must be conclusive and not suggest more actions.
+- Select the most well-written or creative action as the winner. Briefly explain why you chose it.
 
-Return three paragraphs:
-1. Describe the final outcome of the scene. It must be conclusive and not suggest more actions.
-2. Explain whether the characters won or lost. The characters must lose if their actions failed, or if nobody acted at all.
-3. Select the most well-written or creative action as the winner. Briefly explain why you chose it.
+Your response must:
+- Use the same language as the setting and character actions.
+- Not invent characters or actions.
+- Stay in character and not reference "players", "game", etc.
+- Not use markdown, bold text, headers, emojis, or any other formatting.
+- Use 100 words or fewer.
 
-You response must:
-- Be written in the same language as the scene description and previous actions.
-- Stay in character: do not speak of "players", "characters", "game", etc.
-- Not use markup, headers, emojis, or any other formatting.
-- Use 150 words or fewer.
-
-Scene:
+Setting:
 {scene}
 
 Actions:

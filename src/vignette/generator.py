@@ -1,7 +1,6 @@
 import logging
 import operator
 from enum import StrEnum, auto
-import time
 from typing import Annotated, Callable
 
 from langgraph.graph import END, START, StateGraph
@@ -105,13 +104,13 @@ class GeneratorGraph:
 
     @staticmethod
     def join_candidates(candidates: list[str]) -> str:
-        # TODO: Switch to one-based indexing to avoid confusing the LLM.
-        parts = [f"{index}. {text}" for index, text in enumerate(candidates)]
+        # One-based indexing to make it easier for the LLM.
+        parts = [f"{index + 1}. {text}" for index, text in enumerate(candidates)]
         return "\n\n".join(parts)
 
     def select_winner(self, state: GeneratorState):
         joined_candidates = GeneratorGraph.join_candidates(state.candidates)
-        index = self.selector(joined_candidates)
+        index = self.selector(joined_candidates) - 1  # Undo one-based indexing.
         return {"winner_index": index}
 
     def refine(self, state: GeneratorState):
