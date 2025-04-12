@@ -6,6 +6,7 @@ import requests
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .generator import GeneratorGraph
 from .prompts import (
@@ -41,9 +42,22 @@ class AI:
             f"Invoking {self.text_model=} with {prompt=}, {temperature=}, {output_model=}"
         )
         try:
-            response = self.text_model.with_structured_output(output_model).invoke(
-                prompt, config={"configurable": {"temperature": temperature}}
+
+            @retry(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(),
+                reraise=True,
+                before_sleep=lambda retry_state: logger.error(
+                    f"Retrying after {retry_state.outcome.exception()}"
+                ),
             )
+            def make_request():
+                return self.text_model.with_structured_output(output_model).invoke(
+                    prompt, config={"configurable": {"temperature": temperature}}
+                )
+
+            response = make_request()
+
         except Exception as error:
             logger.error(f"Encountered {error=}")
             return None
@@ -75,7 +89,20 @@ class AI:
             }
         ]
 
-        response = requests.post(url, headers=headers, json=data)
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(),
+            reraise=True,
+            before_sleep=lambda retry_state: logger.error(
+                f"Retrying after {retry_state.outcome.exception()}"
+            ),
+        )
+        def make_request():
+            response = requests.post(url, headers=headers, json=data)
+            response.raise_for_status()
+            return response
+
+        response = make_request()
 
         # TODO: Instead of handling errors here, propagate everything and catch only at the bot command level.
         if response.status_code != 200:

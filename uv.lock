@@ -1048,6 +1048,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-telegram-bot" },
     { name = "rich" },
+    { name = "tenacity" },
 ]
 
 [package.metadata]
@@ -1062,6 +1063,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "python-telegram-bot", specifier = ">=22.0" },
     { name = "rich", specifier = ">=13.9.4" },
+    { name = "tenacity", specifier = ">=9.0.0" },
 ]
 
 [[package]]

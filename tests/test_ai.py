@@ -1,5 +1,6 @@
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
+from tenacity import wait_fixed
 
 from vignette.ai import AI
 
@@ -21,6 +22,8 @@ def mock_ai(mocker):
     )
     ai.image_model = mocker.MagicMock()
     ai.generate_image = mocker.MagicMock(return_value=IMAGE_MODEL_OUTPUT)
+
+    mocker.patch("vignette.ai.wait_exponential", return_value=wait_fixed(0.01))
     return ai
 
 
@@ -37,6 +40,7 @@ def mock_failing_ai(mocker, mock_ai):
     )
     # TODO: A better mock would raise an exception, but we first need to change
     # how we handle exceptions (only catch at the bot command level).
+    # Returning `None` also messes up our retry logic during testing.
     mock_ai.generate_image = mocker.MagicMock(return_value=None)
     return mock_ai
 
@@ -56,7 +60,8 @@ async def test_handles_errors_when_creating_scene(mock_failing_ai):
     text, image = await mock_failing_ai.create_scene("Initial scene")
     assert text is None
     assert image is None
-    assert mock_failing_ai.text_model.with_structured_output.call_count == 6
+    # Same as the happy path, but with 3 retries.
+    assert mock_failing_ai.text_model.with_structured_output.call_count == 6 * 3
     assert mock_failing_ai.generate_image.call_count == 1
 
 
@@ -71,7 +76,8 @@ async def test_adds_action(mock_working_ai):
 async def test_handles_errors_when_adding_action(mock_failing_ai):
     result = await mock_failing_ai.add_action("Scene", "Outcomes", "Name", "Action")
     assert result is None
-    assert mock_failing_ai.text_model.with_structured_output.call_count == 2
+    # Same as the happy path, but with 3 retries.
+    assert mock_failing_ai.text_model.with_structured_output.call_count == 2 * 3
 
 
 @pytest.mark.asyncio
@@ -86,4 +92,5 @@ async def test_ends_scene(mock_working_ai):
 async def test_handles_errors_when_ending_scene(mock_failing_ai):
     result = await mock_failing_ai.end_scene("Scene", "Outcomes")
     assert result is None
-    assert mock_failing_ai.text_model.with_structured_output.call_count == 5
+    # Same as the happy path, but with 3 retries.
+    assert mock_failing_ai.text_model.with_structured_output.call_count == 5 * 3
