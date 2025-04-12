@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 
-from telegram import Chat, Update, User
+from telegram import Chat, Message, Update, User
 from telegram.constants import ParseMode
 from telegram.ext import (
     BaseHandler,
@@ -45,7 +45,7 @@ class Bot:
     def handlers(self) -> list[BaseHandler]:
         return [
             CommandHandler("help", self.handle_help),
-            CommandHandler("scene", self.handle_scene),
+            CommandHandler("start", self.handle_start),
             CommandHandler("end", self.handle_end),
             CommandHandler("reset", self.handle_reset),
             MessageHandler(filters.REPLY, self.handle_reply),
@@ -56,7 +56,7 @@ class Bot:
     ) -> None:
         await update.message.set_reaction("👍")
         await update.message.reply_text(
-            text="1\. `/scene <description>` to create a new scene\. There can be only one active scene\.\n"
+            text="1\. `/start <description>` to create a new scene\. There can be only one active scene\.\n"
             "2\. Reply to the scene message to act\. You may only act once\.\n"
             "3\. `/end` to complete the scene\. Scenes also autocomplete once the majority of chat members reply\.\n"
             "\n"
@@ -65,7 +65,7 @@ class Bot:
             reply_to_message_id=update.message.message_id,
         )
 
-    async def handle_scene(
+    async def handle_start(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not context.args:
@@ -82,11 +82,8 @@ class Bot:
             )
             return
 
-        # Acknowledge the command.
-        await update.message.set_reaction("👍")
-
         # Expand the scene description.
-        await update.message.chat.send_action(action="typing")
+        await self._ack_message(update.message)
         initial_description = " ".join(context.args)
         expanded_description, image_url = await self.ai.create_scene(
             initial_description
@@ -150,8 +147,7 @@ class Bot:
         )
 
         # Generate the outcome.
-        await update.message.set_reaction("👍")
-        await update.message.chat.send_action(action="typing")
+        await self._ack_message(update.message)
         outcome = await self.ai.add_action(
             scene.description, scene.outcomes(), name, action
         )
@@ -172,30 +168,34 @@ class Bot:
 
         # End scene if we have a majority of replies.
         if await self._has_majority_replied(update.message.chat, context):
-            await self.end_scene(update.message.chat, context)
+            await self.handle_end(update, context)
 
     async def handle_end(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not Bot._is_scene_active(context):
-            return
-
-        await update.message.set_reaction("👍")
-        await self.end_scene(update.message.chat, context)
-
-    async def end_scene(self, chat: Chat, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await chat.send_action(action="typing")
-        scene = Bot._get_scene(context)
-        summary = await self.ai.end_scene(scene.description, scene.outcomes())
-        if not summary:
-            await chat.send_message(
-                "⚠️ Error while completing the scene.",
-                reply_to_message_id=scene.message_id,
+            await update.message.reply_text(
+                "⚠️ No active scene to end.",
+                reply_to_message_id=update.message.message_id,
             )
             return
 
-        await chat.send_message(summary, reply_to_message_id=scene.message_id)
+        await self._ack_message(update.message)
+        scene = Bot._get_scene(context)
+        summary = await self.ai.end_scene(scene.description, scene.outcomes())
+        if not summary:
+            await update.message.reply_text(
+                "⚠️ Error while completing the scene.",
+                reply_to_message_id=update.message.message_id,
+            )
+            return
+
+        await update.message.reply_text(summary, reply_to_message_id=scene.message_id)
         Bot._delete_scene(context)
+
+    async def _ack_message(self, message: Message) -> None:
+        await message.set_reaction("👍")
+        await message.chat.send_action(action="typing")
 
     @staticmethod
     def _get_scene(context: ContextTypes.DEFAULT_TYPE) -> Scene | None:

@@ -96,7 +96,7 @@ async def test_posts_help(bot, update, context):
     update.message.reply_text.assert_called_once()
     # ...with expected content
     _, call_kwargs = update.message.reply_text.call_args
-    assert "/scene" in call_kwargs.get("text")
+    assert "/start" in call_kwargs.get("text")
     # ...as a reply to the original message.
     assert call_kwargs.get("reply_to_message_id") == update.message.message_id
 
@@ -107,7 +107,7 @@ async def test_creates_scene(bot, update, context, mocker):
     update.message.reply_photo.return_value = mocker.MagicMock(
         message_id=BOT_SCENE_MESSAGE_ID
     )
-    await bot.handle_scene(update, context)
+    await bot.handle_start(update, context)
 
     # Verify that AI was called
     bot.ai.create_scene.assert_called_once_with("Initial scene")
@@ -130,7 +130,7 @@ async def test_creates_scene(bot, update, context, mocker):
 async def test_handles_empty_scene_description(bot, update, context):
     assert not Bot._is_scene_active(context)
     context.args = []
-    await bot.handle_scene(update, context)
+    await bot.handle_start(update, context)
 
     # Verify that no scene was created
     assert not Bot._is_scene_active(context)
@@ -145,7 +145,7 @@ async def test_handles_empty_scene_description(bot, update, context):
 @pytest.mark.asyncio
 async def test_does_not_overwrite_existing_scene(bot, update, context):
     assert not Bot._is_scene_active(context)
-    await bot.handle_scene(update, context)
+    await bot.handle_start(update, context)
 
     # Verify that a scene was created
     assert Bot._is_scene_active(context)
@@ -157,7 +157,7 @@ async def test_does_not_overwrite_existing_scene(bot, update, context):
     assert not called_with_warning(update.message.reply_photo)
 
     # Try to create another scene.
-    await bot.handle_scene(update, context)
+    await bot.handle_start(update, context)
 
     # Verify that the scene remained unchanged
     assert id(Bot._get_scene(context)) == scene_id
@@ -173,7 +173,7 @@ async def test_does_not_overwrite_existing_scene(bot, update, context):
 async def test_handles_ai_errors_when_creating_scene(bot, update, context):
     assert not Bot._is_scene_active(context)
     bot.ai.create_scene.return_value = None, None
-    await bot.handle_scene(update, context)
+    await bot.handle_start(update, context)
 
     # Verify that AI was called
     bot.ai.create_scene.assert_called_once()
@@ -193,13 +193,13 @@ async def test_resets_scene(bot, update, context):
     assert not Bot._is_scene_active(context)
 
     # Create a scene
-    await bot.handle_scene(update, context)
+    await bot.handle_start(update, context)
     assert Bot._is_scene_active(context)
     # ...reset
     await bot.handle_reset(update, context)
     assert not Bot._is_scene_active(context)
     # ...and create again.
-    await bot.handle_scene(update, context)
+    await bot.handle_start(update, context)
     assert Bot._is_scene_active(context)
 
 
@@ -248,12 +248,9 @@ async def test_handles_replies(bot, update, context, mocker):
 
     # Verify that AI was called
     assert bot.ai.add_action.call_count == 3
-    # ...a normal reply was posted
-    assert update.message.reply_text.call_count == 3
+    # ...a normal reply and scene summary were posted
+    assert update.message.reply_text.call_count == 4
     assert not called_with_warning(update.message.reply_text)
-    # ...a scene summary was posted
-    assert update.message.chat.send_message.call_count == 1
-    assert not called_with_warning(update.message.chat.send_message)
     # ...and the scene was deleted.
     assert not Bot._is_scene_active(context)
 
@@ -348,8 +345,8 @@ async def test_completes_scene(bot, update, context):
     # Verify that it was completed
     assert not Bot._is_scene_active(context)
     # ...a scene summary was posted.
-    update.message.chat.send_message.assert_called_once()
-    assert not called_with_warning(update.message.chat.send_message)
+    update.message.reply_text.assert_called_once()
+    assert not called_with_warning(update.message.reply_text)
 
 
 @pytest.mark.asyncio
@@ -360,12 +357,12 @@ async def test_handles_ai_errors_when_completing_scenes(bot, update, context):
     )
     # ...and complete it, but make AI fail.
     bot.ai.end_scene.return_value = None
-    await bot.end_scene(update.message.chat, context)
+    await bot.handle_end(update, context)
 
     # Verify that AI was called
     bot.ai.end_scene.assert_called_once()
     # ...a reply with a warning was posted
-    update.message.chat.send_message.assert_called_once()
-    assert called_with_warning(update.message.chat.send_message)
+    update.message.reply_text.assert_called_once()
+    assert called_with_warning(update.message.reply_text)
     # ...and the scene remained active.
     assert Bot._is_scene_active(context)
